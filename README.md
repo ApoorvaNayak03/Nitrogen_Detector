@@ -1,16 +1,5 @@
-# leaf_categoriser
-
-A new Flutter project.
+# Leaf_categoriser
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+This Flutter project serves as a mobile tool for nitrogen content detection in leaf images. Leveraging the device's camera, users can capture images of leaves, enabling the app to perform an analysis and estimate nitrogen levels within the foliage. The main screen showcases the captured images, while tapping on a specific image opens a full-screen view presenting detailed nitrogen category information associated with that particular leaf. This application provides an intuitive and accessible platform for users to assess and categorize nitrogen content in leaves, facilitating efficient and portable monitoring of plant health.
