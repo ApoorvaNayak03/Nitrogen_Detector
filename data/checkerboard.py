@@ -1,0 +1,157 @@
+import numpy as np
+import cv2 as cv
+import glob
+import pickle
+
+
+chessboardSize = (11,7)
+frameSize = (640,480)
+
+# termination criteria
+criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+
+# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
+objp = np.zeros((chessboardSize[0] * chessboardSize[1], 3), np.float32)
+objp[:,:2] = np.mgrid[0:chessboardSize[0],0:chessboardSize[1]].T.reshape(-1,2)
+
+size_of_chessboard_squares_mm = 20
+objp = objp * size_of_chessboard_squares_mm
+
+
+# Arrays to store object points and image points from all the images.
+objpoints = [] # 3d point in real world space
+imgpoints = [] # 2d points in image plane.
+
+
+images = glob.glob('imgs/leftcamera/*.png')
+print(len(images))
+
+for image in images:
+
+    img = cv.imread(image)
+    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
+    # Find the chess board corners
+    ret, corners = cv.findChessboardCorners(gray, chessboardSize, None)
+
+    # If found, add object points, image points (after refining them)
+    if ret == True:
+
+        objpoints.append(objp)
+        corners2 = cv.cornerSubPix(gray, corners, (11,11), (-1,-1), criteria)
+        imgpoints.append(corners)
+
+        # Draw and display the corners
+        cv.drawChessboardCorners(img, chessboardSize, corners2, ret)
+        cv.imshow('img', img)
+        cv.waitKey(1000)
+
+
+cv.destroyAllWindows()
+
+
+
+ret, cameraMatrix, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, frameSize, None, None)
+
+# Save the camera calibration result for later use (we won't worry about rvecs / tvecs)
+pickle.dump((cameraMatrix, dist), open( "calibration.pkl", "wb" ))
+pickle.dump(cameraMatrix, open( "cameraMatrix.pkl", "wb" ))
+pickle.dump(dist, open( "dist.pkl", "wb" ))
+
+
+############## UNDISTORTION #####################################################
+
+img = cv.imread('C:/Users/APOORVA NAYAK B/OneDrive/Desktop/data/imgs/leftcamera/Im_L_5.png')
+h,  w = img.shape[:2]
+newCameraMatrix, roi = cv.getOptimalNewCameraMatrix(cameraMatrix, dist, (w,h), 1, (w,h))
+
+# Undistort
+dst = cv.undistort(img, cameraMatrix, dist, None, newCameraMatrix)
+
+# crop the image
+x, y, w, h = roi
+dst = dst[y:y+h, x:x+w]
+cv.imwrite('caliResult1.png', dst)
+# Undistort with Remapping
+mapx, mapy = cv.initUndistortRectifyMap(cameraMatrix, dist, None, newCameraMatrix, (w,h), 5)
+dst = cv.remap(img, mapx, mapy, cv.INTER_LINEAR)
+# crop the image
+x, y, w, h = roi
+dst = dst[y:y+h, x:x+w]
+cv.imwrite('caliResult2.png', dst)
+
+
+# Reprojection Error
+mean_error = 0
+
+for i in range(len(objpoints)):
+    imgpoints2, _ = cv.projectPoints(objpoints[i], rvecs[i], tvecs[i], cameraMatrix, dist)
+    error = cv.norm(imgpoints[i], imgpoints2, cv.NORM_L2)/len(imgpoints2)
+    mean_error += error
+
+print( "total error: {}".format(mean_error/len(objpoints)) )
+
+print(newCameraMatrix)
+print(dist)
+
+from flask import Flask, request, jsonify
+import base64
+import cv2
+import numpy as np
+
+app = Flask(_name_)
+
+# Assuming that camera_matrix and dist are obtained during calibration
+# You need to replace these with your actual camera matrix and distortion coefficients
+camera_matrix = np.array([[706.94466417   0.         516.12595361]
+[  0.         717.45409302 287.33655537]
+ [  0.           0.           1.        ]])
+dist = np.array([ 3.01821309e-02 -1.67247050e-01  1.07340349e-04 -1.92399055e-04 1.89791896e-01])
+
+@app.route('/', methods=['POST'])
+def hello_world():
+    data = request.get_json(force=True)
+    image_data = data['image']
+    imgdata = base64.b64decode(image_data)
+
+    # Save image
+    filename = 'leaf.jpg'
+    with open(filename, 'wb') as f:
+        f.write(imgdata)
+        print("Successful")
+
+    # Load the image
+    image = cv2.imread('leaf.jpg')
+
+    # Undistort the image using the camera matrix and distortion coefficients
+    undistorted_image = cv2.undistort(image, camera_matrix, dist)
+
+    # Further processing
+    category = processing(undistorted_image)
+
+    return jsonify({"category": category})
+
+
+def processing(image):
+    result = {}
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    lower_green = np.array([40, 40, 40])
+    upper_green = np.array([80, 255, 255])
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+    result1 = cv2.bitwise_and(image, image, mask=mask)
+    average_green = np.mean(result1, axis=(0, 1))
+    
+    if average_green[1] < 50:
+        result = {'status': 'success', 'message': 'Image received and processed successfully in category 1', 'category': 'Category 1'}
+    elif 50 <= average_green[1] < 150:
+        result = {'status': 'success', 'message': 'Image received and processed successfully in category 2', 'category': 'Category 2'}
+    elif 150 <= average_green[1] <= 255:
+        result = {'status': 'success', 'message': 'Image received and processed successfully in category 3', 'category': 'Category 3'}
+    else:
+        result = {'status': 'error', 'message': 'Invalid green value'}
+
+    return result
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', debug=True)
